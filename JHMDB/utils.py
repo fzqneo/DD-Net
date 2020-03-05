@@ -8,17 +8,20 @@ from scipy.signal import medfilt
 ###################################################################################
     
     
-#Rescale to be 64 frames
+#Rescale/Interpolate to be target_l frames
 def zoom(p,target_l=64,joints_num=25,joints_dim=3):
     l = p.shape[0]
+    if l == target_l: # need do nothing
+        return p
     p_new = np.empty([target_l,joints_num,joints_dim]) 
     for m in range(joints_num):
         for n in range(joints_dim):
-            p_new[:,m,n] = medfilt(p_new[:,m,n],3)
-            p_new[:,m,n] = inter.zoom(p[:,m,n],target_l/l)[:target_l]         
+#             p_new[:,m,n] = medfilt(p_new[:,m,n],3)  # zf: p_new is uninitialized. this is useless
+            p_new[:,m,n] = inter.zoom(p[:,m,n],target_l/l)
     return p_new
 
 def sampling_frame(p,C):
+    # randomly sample a subset of the frames of a point, then rescale it to match the original frame length
     full_l = p.shape[0] # full length
     if random.uniform(0,1)<0.5: # aligment sampling
         valid_l = np.round(np.random.uniform(0.85,1)*full_l)
@@ -37,6 +40,7 @@ def norm_scale(x):
 
 from scipy.spatial.distance import cdist
 def get_CG(p,C):
+    # return JCD of a point, normalized to 0 mean
     M = []
     iu = np.triu_indices(C.joint_n,1,C.joint_n)
     for f in range(C.frame_l): 
