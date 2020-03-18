@@ -29,7 +29,7 @@ class DDNetConfig():
         self.joint_n = num_joints
         self.joint_d = joint_dim
         self.clc_num = num_classes
-        self.feat_d = num_joints * (num_joints-1)  # the (flatten) diemsnion of JCD
+        self.feat_d = int(num_joints * (num_joints-1) / 2)  # the (flatten) diemsnion of JCD
         self.filters = num_filters
 
 def infer_DDNet(net, C, batch, *args, **kwargs):
@@ -45,7 +45,12 @@ def infer_DDNet(net, C, batch, *args, **kwargs):
     return net.predict([X0, X1], *args, **kwargs)
 
 def fit_DDNet(net, C, X, Y, *args, **kwargs):
-    X0, X1 = preprocess_batch(X, C)
+    if type(X) in (list, tuple):
+        # assume preprocessed-input
+        X0, X1 = X
+    else:
+        print("Preprocessing input f{type(X))")
+        X0, X1 = preprocess_batch(X, C)
     net.fit([X0, X1], Y, *args, **kwargs)
 
 def create_DDNet(C):
@@ -53,11 +58,32 @@ def create_DDNet(C):
     return build_DD_Net(C)
 
 def save_DDNet(net, path):
-    net.save_model(path)
+    net.save(path)
 
 def load_DDNet(path):
     return load_model(path, custom_objects=_custom_objs)    # custom_objects is necessary
 
+
+def preprocess_batch(batch, C):
+    """Preprocesss a batch of points (clips)
+    
+    Arguments:
+        batch {ndarray or list or tuple} -- List of arrays as input to preprocess_point
+        C {DDNetConfig} -- A DDNetConfig object
+    
+    Returns:
+        ndarray, ndarray -- X0, X1 to input to the net
+    """
+    assert type(batch) in (np.ndarray, list, tuple)
+    X0 = []
+    X1 = []
+    for p in batch:
+        px0, px1 = preprocess_point(p, C)
+        X0.append(px0)
+        X1.append(px1)
+    X0 = np.stack(X0)
+    X1 = np.stack(X1)
+    return X0, X1
 
 #######################################################
 ## Private functions
@@ -135,26 +161,6 @@ def preprocess_point(p, C):
 
     return M, p
 
-def preprocess_batch(batch, C):
-    """Preprocesss a batch of points (clips)
-    
-    Arguments:
-        batch {ndarray or list or tuple} -- List of arrays as input to preprocess_point
-        C {DDNetConfig} -- A DDNetConfig object
-    
-    Returns:
-        ndarray, ndarray -- X0, X1 to input to the net
-    """
-    assert type(batch) in (np.ndarray, list, tuple)
-    X0 = []
-    X1 = []
-    for p in batch:
-        px0, px1 = preprocess_point(p, C)
-        X0.append(px0)
-        X1.append(px1)
-    X0 = np.stack(X0)
-    X1 = np.stack(X1)
-    return X0, X1
 
 #######################################################
 ### Model architecture
