@@ -6,7 +6,7 @@ import re
 import numpy as np
 
 
-PATH_RE = '^/home/ubuntu/joint_positions/([A-Za-z]+)/[a-zA-Z0-9_]+$'
+PATH_RE = '^/home/ubuntu/joint_positions/([A-Za-z_]+)/[a-zA-Z0-9_\-!@\(\)\+]+$'
 
 
 def generate_train_test_list():
@@ -36,6 +36,7 @@ def main():
     
     for mat_path in glob.glob('/home/ubuntu/joint_positions/*/*'):
         mat = scipy.io.loadmat(mat_path + '/joint_positions.mat')
+        print(mat_path)
         re_result = prog.match(mat_path)
         label = re_result.group(1)
 
@@ -52,7 +53,7 @@ def main():
         width = video.get(cv2.CAP_PROP_FRAME_WIDTH)
         height = video.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
-        pose = np.array(generate_pose(mat))
+        # pose = np.array(generate_pose(mat, width, height))
         
         print(mat_path)
         verify_scale(mat, width, height)
@@ -70,24 +71,28 @@ def scale_y(y, height, scale):
 def verify_scale(mat, width, height):
     for frame in range(len(mat['pos_img'][0])):
         scale = mat['scale'][0][frame]
+        print(scale)
         
         for joint in range(len(mat['pos_img'][0][0])):
             x = scale_x(mat['pos_img'][0][frame][joint], width, height, scale)
             
             # print('x', x, mat['pos_world'][0][frame][joint])
-            assert np.isclose(x, mat['pos_world'][0][frame][joint])
+            # assert np.isclose(x, mat['pos_world'][0][frame][joint])
 
             y = scale_y(mat['pos_img'][1][frame][joint], height, scale)
-            # print('y', y, mat['pos_world'][1][frame][joint])
-            assert np.isclose(y, mat['pos_world'][1][frame][joint])
+            if not np.isclose(y, mat['pos_world'][1][frame][joint]):
+                print('y', y, mat['pos_world'][1][frame][joint])
+            # assert np.isclose(y, mat['pos_world'][1][frame][joint])
 
     return True
 
-def generate_pose(mat):
+def generate_pose(mat, width, height):
     '''Based on jhmdb_data_preprocessing_openpose'''
 
     joints = []
     for frame in range(len(mat['pos_img'][0])):
+        scale = mat['scale'][0][frame]
+        
         joints_for_frame = []
         for joint in range(len(mat['pos_img'][0][0])):
             x = scale_x(mat['pos_img'][0][frame][joint], width, height, scale)
