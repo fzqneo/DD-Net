@@ -1,4 +1,5 @@
 # import cv2
+import json
 import scipy.io
 import os
 import glob
@@ -52,7 +53,7 @@ def generate_train_test_sets(lists):
 
 def main():
     data_dir = os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB')
-    save_dir = os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB')
+    save_dir = os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB_openpose')
 
     GT_split_lists = glob.glob(os.path.join(data_dir, 'GT_splits/*.txt'))
 
@@ -81,81 +82,89 @@ def main():
         openpose_path = mat_path.replace(
             '/home/ubuntu/joint_positions', '/home/ubuntu/openface_jhmdb')
 
-        assert mat['pos_img'].shape[2]==len(glob.glob(openpose_path + '/*'))
+        openpose_file_paths = glob.glob(openpose_path + '/*')
+        assert mat['pos_img'].shape[2]==len(openpose_file_paths)
 
-        pose = np.array(generate_pose(mat))
+        # pose = np.array(generate_pose(mat))
+        num_keypoints = get_num_keypoints(openpose_file_paths)
+        if num_keypoints is None:
+            print('None', mat_path)
+        else:
+            pose = np.array(pose_from_openpose(openpose_file_paths, num_keypoints))
 
-        if filename_without_avi in train_set:
-            train['label'].append(label)
-            train['pose'].append(pose)
-        elif filename_without_avi in test_set:
-            test['label'].append(label)
-            test['pose'].append(pose)
+            if filename_without_avi in train_set:
+                train['label'].append(label)
+                train['pose'].append(pose)
+            elif filename_without_avi in test_set:
+                test['label'].append(label)
+                test['pose'].append(pose)
 
     pickle.dump(train, open(os.path.join(save_dir, "GT_train_1.pkl"), "wb"))
     pickle.dump(test, open(os.path.join(save_dir, "GT_test_1.pkl"), "wb"))
 
-
-def scale_x(x, width, height, scale):
-    '''Based on http://files.is.tue.mpg.de/jhmdb/README_joint_positions.txt'''
-
-    return (((((float(x) / width) - 0.5) * width) / height) / scale)
-
-def scale_y(y, height, scale):
-    return (((float(y) / height) - 0.5) / scale)
-
-def compute_x_scale(img_x, world_x, width, height):
-    return (((((float(img_x) / width) - 0.5) * width) / height) / world_x)
-
-def compute_y_scale(img_y, world_y, height):
-    return (((float(img_y) / height) - 0.5) / world_y)
-
-def verify_scale_back(mat, width, height):
-    for frame in range(len(mat['pos_img'][0])):
-        for joint in range(len(mat['pos_img'][0][0])):
-            x_scale = compute_x_scale(
-                mat['pos_img'][0][frame][joint],
-                mat['pos_world'][0][frame][joint], width, height)
-            y_scale = compute_y_scale(
-                mat['pos_img'][1][frame][joint],
-                mat['pos_world'][1][frame][joint], height)
-
-            assert np.isclose(x_scale, y_scale)
-            
-
-def verify_scale(mat, width, height):
-    for frame in range(len(mat['pos_img'][0])):
-        scale = mat['scale'][0][frame]
-        
-        for joint in range(len(mat['pos_img'][0][0])):
-            x = scale_x(mat['pos_img'][0][frame][joint], width, height, scale)
-            
-            # print('x', x, mat['pos_world'][0][frame][joint])
-            if not np.isclose(x, mat['pos_world'][0][frame][joint]):
-                print('x', x, mat['pos_world'][0][frame][joint])
-                print(mat['pos_img'][0][frame][joint])
-
-            y = scale_y(mat['pos_img'][1][frame][joint], height, scale)
-            if not np.isclose(y, mat['pos_world'][1][frame][joint]):
-                print('y', y, mat['pos_world'][1][frame][joint])
-            # assert np.isclose(y, mat['pos_world'][1][frame][joint])
-
-    return True
-
 def generate_pose(mat):
     '''Based on jhmdb_data_preprocessing_openpose'''
 
-    points_all_joints_all_frames = []
-    for joint in range(len(mat['pos_img'][0][0])):    
-        points_for_joint = []
-        for frame in range(len(mat['pos_img'][0])):
-            x = mat['pos_img'][0][frame][joint]
-            y = mat['pos_img'][1][frame][joint]
+    points_all_frames = []
+    for frame in range(len(mat['pos_img'][0][0])):
+        points_for_frame = []
+
+        for joint in range(len(mat['pos_img'][0])):
+            x = mat['pos_img'][0][joint][frame]
+            y = mat['pos_img'][1][joint][frame]
             point = [np.round(x, 3), np.round(y, 3)]
-            points_for_joint.append(point)
-        points_all_joints_all_frames.append(points_for_joint)
+            points_for_frame.append(point)
+        points_all_frames.append(points_for_frame)
 
     return points_all_joints_all_frames
+
+def find_person_most_points(people):
+    most_nonzeros = 0
+    index_most_nonzeros = 0
+    for i in range(len(people)):
+        person = people[i]
+        nonzeros = 0
+        for point in people[i]['pose_keypoints_2d']:
+            if point > 0:
+                nonzeros += 1
+
+        if nonzeros > most_nonzeros:
+            most_nonzeros = nonzeros
+            index_most_nonzeros = i
+
+    return index_most_nonzeros
+
+def get_num_keypoints(file_paths):
+    for file_path in file_paths:
+        with open(file_path) as json_file:
+            json_content = json.load(json_file)
+            people = json_content['people']
+            if len(people) > 0:
+                num_keypoints = len(people[0]['pose_keypoints_2d'])
+                assert (num_keypoints % 3) == 0
+                return num_keypoints
+
+    return None
+
+def pose_from_openpose(file_paths, num_keypoints):
+    all_points = []
+    for file_path in file_paths:
+        points_for_frame = []
+        with open(file_path) as json_file:
+            content = json.load(json_file)
+            people = content['people']
+            if len(people) > 0:
+                for i in range(0, num_keypoints, 3):
+                    person_index = find_person_most_points(people)
+
+                    keypoints = people[person_index]['pose_keypoints_2d']
+                    x = keypoints[i]
+                    y = keypoints[i + 1]
+                    point = [np.round(x, 3), np.round(y, 3)]
+                    points_for_frame.append(point)
+                all_points.append(points_for_frame)
+
+    return all_points
 
 if __name__ == '__main__':
     main()
