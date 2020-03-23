@@ -1,4 +1,3 @@
-# import cv2
 import json
 import scipy.io
 import os
@@ -11,30 +10,10 @@ import numpy as np
 PATH_RE = '^/home/ubuntu/joint_positions/([A-Za-z_]+)/([a-zA-Z0-9_\-!@\(\)\+]+)$'
 
 
-def generate_train_test_list():
-    GT_split_lists = glob.glob(os.path.join(
-        os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB'),
-        'GT_splits/*.txt'))
-
-    GT_lists_1 = []
-    GT_lists_2 = []
-    GT_lists_3 = []
-    for file in GT_split_lists:
-        if file.split('/')[-1].split('.')[0].split('_')[-1] == 'split1':
-            GT_lists_1.append(file) 
-        elif file.split('/')[-1].split('.')[0].split('_')[-1] == 'split2':
-            GT_lists_2.append(file)
-        elif file.split('/')[-1].split('.')[0].split('_')[-1] == 'split3':
-            GT_lists_3.append(file)
-
-    return GT_lists_1, GT_lists_2, GT_lists_3
-
 def read_annotation(annotation_path):
     lines = []
     with open(annotation_path) as f:
-        lines.append(f.read().splitlines() )
-    f.close()
-    #lines = np.sort(lines)
+        lines.append(f.read().splitlines())
     lines = np.hstack(lines)
     return lines
 
@@ -59,7 +38,7 @@ def main():
 
     GT_lists_1 = []
     for filename in GT_split_lists:
-        if filename.split('/')[-1].split('.')[0].split('_')[-1] == 'split1':
+        if (filename.split('/')[-1].split('.')[0].split('_')[-1] == 'split1'):
             GT_lists_1.append(filename)
 
     train_set, test_set = generate_train_test_sets(GT_lists_1)
@@ -145,7 +124,7 @@ def pose_from_openpose(file_paths):
             people = content['people']
             if len(people) > 0:                
                 keypoints = people[0]['pose_keypoints_2d']
-                for i in KEYPOINT_INDICES:
+                for i in range(25):
                     starting = i * 3
                     x = keypoints[starting]
                     y = keypoints[starting + 1]
