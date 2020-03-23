@@ -71,8 +71,9 @@ def main():
     test['pose'] = []
     test['label'] = []
 
-    prog = re.compile(PATH_RE)
+    good_count, bad_count = 0, 0
     
+    prog = re.compile(PATH_RE)
     for mat_path in glob.glob('/home/ubuntu/joint_positions/*/*'):
         mat = scipy.io.loadmat(mat_path + '/joint_positions.mat')
         re_result = prog.match(mat_path)
@@ -82,15 +83,23 @@ def main():
         openpose_path = mat_path.replace(
             '/home/ubuntu/joint_positions', '/home/ubuntu/openface_jhmdb')
 
-        openpose_file_paths = glob.glob(openpose_path + '/*')
+        openpose_file_paths = sorted(glob.glob(openpose_path + '/*'))
         assert mat['pos_img'].shape[2]==len(openpose_file_paths)
 
-        # pose = np.array(generate_pose(mat))
-        num_keypoints = get_num_keypoints(openpose_file_paths)
-        if num_keypoints is None:
-            print('None', mat_path)
+        bad = False
+        for openpose_file_path in openpose_file_paths:
+            with open(openpose_file_path) as json_file:
+                json_content = json.load(json_file)
+                people = json_content['people']
+                if len(people) != 1:
+                    bad = True
+
+        if bad:
+            bad_count += 1
         else:
-            pose = np.array(pose_from_openpose(openpose_file_paths, num_keypoints))
+            good_count += 1
+            # pose = np.array(generate_pose(mat))
+            pose = np.array(pose_from_openpose(openpose_file_paths))
 
             if filename_without_avi in train_set:
                 train['label'].append(label)
@@ -98,9 +107,14 @@ def main():
             elif filename_without_avi in test_set:
                 test['label'].append(label)
                 test['pose'].append(pose)
+            else:
+                raise Exception('Not in train or test')
 
     pickle.dump(train, open(os.path.join(save_dir, "GT_train_1.pkl"), "wb"))
     pickle.dump(test, open(os.path.join(save_dir, "GT_test_1.pkl"), "wb"))
+    print('good count', good_count)
+    print('bad count', bad_count)
+    print(len(train['pose']), len(test['pose']))
 
 def generate_pose(mat):
     '''Based on jhmdb_data_preprocessing_openpose'''
@@ -116,50 +130,25 @@ def generate_pose(mat):
             points_for_frame.append(point)
         points_all_frames.append(points_for_frame)
 
-    return points_all_joints_all_frames
+    return points_all_frames
 
-def find_person_most_points(people):
-    most_nonzeros = 0
-    index_most_nonzeros = 0
-    for i in range(len(people)):
-        person = people[i]
-        nonzeros = 0
-        for point in people[i]['pose_keypoints_2d']:
-            if point > 0:
-                nonzeros += 1
 
-        if nonzeros > most_nonzeros:
-            most_nonzeros = nonzeros
-            index_most_nonzeros = i
+KEYPOINT_INDICES = [1, 8, 0, 2, 5, 9, 12, 3, 6, 10, 13, 4, 7, 11, 14]
 
-    return index_most_nonzeros
 
-def get_num_keypoints(file_paths):
-    for file_path in file_paths:
-        with open(file_path) as json_file:
-            json_content = json.load(json_file)
-            people = json_content['people']
-            if len(people) > 0:
-                num_keypoints = len(people[0]['pose_keypoints_2d'])
-                assert (num_keypoints % 3) == 0
-                return num_keypoints
-
-    return None
-
-def pose_from_openpose(file_paths, num_keypoints):
+def pose_from_openpose(file_paths):
     all_points = []
     for file_path in file_paths:
         points_for_frame = []
         with open(file_path) as json_file:
             content = json.load(json_file)
             people = content['people']
-            if len(people) > 0:
-                for i in range(0, num_keypoints, 3):
-                    person_index = find_person_most_points(people)
-
-                    keypoints = people[person_index]['pose_keypoints_2d']
-                    x = keypoints[i]
-                    y = keypoints[i + 1]
+            if len(people) > 0:                
+                keypoints = people[0]['pose_keypoints_2d']
+                for i in KEYPOINT_INDICES:
+                    starting = i * 3
+                    x = keypoints[starting]
+                    y = keypoints[starting + 1]
                     point = [np.round(x, 3), np.round(y, 3)]
                     points_for_frame.append(point)
                 all_points.append(points_for_frame)
