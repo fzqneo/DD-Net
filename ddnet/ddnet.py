@@ -49,7 +49,7 @@ def fit_DDNet(net, C, X, Y, *args, **kwargs):
         # assume preprocessed-input
         X0, X1 = X
     else:
-        print("Preprocessing input f{type(X))")
+        print(f"Preprocessing input {type(X)}")
         X0, X1 = preprocess_batch(X, C)
     net.fit([X0, X1], Y, *args, **kwargs)
 
