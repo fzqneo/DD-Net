@@ -32,7 +32,7 @@ def generate_train_test_sets(lists):
 
 def main():
     data_dir = os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB')
-    save_dir = os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB_openpose')
+    save_dir = os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB_script')
 
     GT_split_lists = glob.glob(os.path.join(data_dir, 'GT_splits/*.txt'))
 
@@ -78,7 +78,7 @@ def main():
         else:
             good_count += 1
             # pose = np.array(generate_pose(mat))
-            pose = np.array(pose_from_openpose(openpose_file_paths))
+            pose = np.array(pose_from_openpose(openpose_file_paths, mat))
 
             if filename_without_avi in train_set:
                 train['label'].append(label)
@@ -95,6 +95,10 @@ def main():
     print('bad count', bad_count)
     print(len(train['pose']), len(test['pose']))
 
+
+JHMDB_KEYPOINT_INDICES = [1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    
+    
 def generate_pose(mat):
     '''Based on jhmdb_data_preprocessing_openpose'''
 
@@ -102,9 +106,11 @@ def generate_pose(mat):
     for frame in range(len(mat['pos_img'][0][0])):
         points_for_frame = []
 
-        for joint in range(len(mat['pos_img'][0])):
-            x = mat['pos_img'][0][joint][frame]
-            y = mat['pos_img'][1][joint][frame]
+        # for joint in JHMDB_KEYPOINT_INDICES:
+        for joint1 in JHMDB_KEYPOINT_INDICES:            
+            x = mat['pos_img'][0][joint1 - 1][frame]
+            y = mat['pos_img'][1][joint1 - 1][frame]
+
             point = [np.round(x, 3), np.round(y, 3)]
             points_for_frame.append(point)
         points_all_frames.append(points_for_frame)
@@ -112,22 +118,29 @@ def generate_pose(mat):
     return points_all_frames
 
 
-KEYPOINT_INDICES = [1, 8, 0, 2, 5, 9, 12, 3, 6, 10, 13, 4, 7, 11, 14]
+KEYPOINT_INDICES = [1, 2, 5, 9, 12, 3, 6, 10, 13, 4, 7, 11, 14]
 
 
-def pose_from_openpose(file_paths):
+def pose_from_openpose(file_paths, mat):
     all_points = []
-    for file_path in file_paths:
+    for file_path, frame in zip(file_paths, range(len(mat['pos_img'][0][0]))):
         points_for_frame = []
         with open(file_path) as json_file:
             content = json.load(json_file)
             people = content['people']
             if len(people) > 0:                
                 keypoints = people[0]['pose_keypoints_2d']
-                for i in range(25):
+                # for i in range(25):
+                for i, joint1 in zip(KEYPOINT_INDICES, JHMDB_KEYPOINT_INDICES):
                     starting = i * 3
                     x = keypoints[starting]
                     y = keypoints[starting + 1]
+
+                    # if x == 0:
+                    #     x = mat['pos_img'][0][joint1 - 1][frame]
+                    # if y == 0:
+                    #     y = mat['pos_img'][1][joint1 - 1][frame]
+                    
                     point = [np.round(x, 3), np.round(y, 3)]
                     points_for_frame.append(point)
                 all_points.append(points_for_frame)
