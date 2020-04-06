@@ -53,7 +53,10 @@ def main():
                         json_content['detection_boxes'],
                         json_content['detection_names'],
                         json_content['detection_scores']):
-                    if detection_name == 'person' and detection_score > 0:
+                    if detection_name == 'person' and detection_score > 0.5:
+
+                        assert json_content['origin_height'] == 240
+                        assert json_content['origin_width'] == 320
 
                         coco_ymin = (json_content['origin_height'] *
                                      detection_box[0])
@@ -72,6 +75,15 @@ def main():
                                          for joint in range(len(mat['pos_img'][1])))
                         jhmdb_xmax = max(mat['pos_img'][0][joint][frame]
                                          for joint in range(len(mat['pos_img'][0])))
+
+                        if jhmdb_ymin < 0:
+                            jhmdb_ymin = 0
+                        if jhmdb_xmin < 0:
+                            jhmdb_xmin = 0
+                        if jhmdb_ymax > 240:
+                            jhmdb_ymax = 240
+                        if jhmdb_xmax > 320:
+                            jhmdb_xmax = 320
 
                         coco_box = [coco_xmin, coco_ymin, coco_xmax, coco_ymax]
                         jhmdb_box = [jhmdb_xmin, jhmdb_ymin, jhmdb_xmax, jhmdb_ymax]
