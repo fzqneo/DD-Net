@@ -30,9 +30,14 @@ def generate_train_test_sets(lists):
                 test_set.add(file_name.split('.')[0])
     return train_set, test_set
 
+
+replace = 0
+not_replace = 0
+
+
 def main():
     data_dir = os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB')
-    save_dir = os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB_script')
+    save_dir = os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB_mix')
 
     GT_split_lists = glob.glob(os.path.join(data_dir, 'GT_splits/*.txt'))
 
@@ -88,6 +93,10 @@ def main():
     print('bad count', bad_count)
     print(len(train['pose']), len(test['pose']))
 
+    global replace
+    global not_replace
+    print('replace', replace, 'not_replace', not_replace)
+
 
 JHMDB_KEYPOINT_INDICES = [1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     
@@ -115,6 +124,9 @@ KEYPOINT_INDICES = [1, 2, 5, 9, 12, 3, 6, 10, 13, 4, 7, 11, 14]
 
 
 def pose_from_openpose(file_paths, mat):
+    global replace
+    global not_replace
+    
     all_points = []
     for file_path, frame in zip(file_paths, range(len(mat['pos_img'][0][0]))):
         points_for_frame = []
@@ -142,10 +154,15 @@ def pose_from_openpose(file_paths, mat):
                 x = keypoints[starting]
                 y = keypoints[starting + 1]
 
-                # if x == 0:
-                #     x = mat['pos_img'][0][joint1 - 1][frame]
-                # if y == 0:
-                #     y = mat['pos_img'][1][joint1 - 1][frame]
+                if x == 0 or y == 0:
+                    replace += 1
+                else:
+                    not_replace += 1
+
+                if x == 0:
+                    x = mat['pos_img'][0][joint1 - 1][frame]
+                if y == 0:
+                    y = mat['pos_img'][1][joint1 - 1][frame]
 
                 point = [np.round(x, 3), np.round(y, 3)]
                 points_for_frame.append(point)
