@@ -63,22 +63,15 @@ def main():
             '/home/ubuntu/joint_positions', '/home/ubuntu/openface_jhmdb')
 
         openpose_file_paths = sorted(glob.glob(openpose_path + '/*'))
-        assert mat['pos_img'].shape[2]==len(openpose_file_paths)
+        assert mat['pos_img'].shape[2] == len(openpose_file_paths)
 
-        bad = False
-        for openpose_file_path in openpose_file_paths:
-            with open(openpose_file_path) as json_file:
-                json_content = json.load(json_file)
-                people = json_content['people']
-                if len(people) != 1:
-                    bad = True
-
-        if bad:
+        all_points = pose_from_openpose(openpose_file_paths, mat)
+        if len(all_points) < 30:
             bad_count += 1
         else:
             good_count += 1
             # pose = np.array(generate_pose(mat))
-            pose = np.array(pose_from_openpose(openpose_file_paths, mat))
+            pose = np.array(all_points)
 
             if filename_without_avi in train_set:
                 train['label'].append(label)
@@ -128,24 +121,95 @@ def pose_from_openpose(file_paths, mat):
         with open(file_path) as json_file:
             content = json.load(json_file)
             people = content['people']
-            if len(people) > 0:                
-                keypoints = people[0]['pose_keypoints_2d']
-                # for i in range(25):
-                for i, joint1 in zip(KEYPOINT_INDICES, JHMDB_KEYPOINT_INDICES):
-                    starting = i * 3
-                    x = keypoints[starting]
-                    y = keypoints[starting + 1]
+            if len(people) == 0:
+                continue
 
-                    # if x == 0:
-                    #     x = mat['pos_img'][0][joint1 - 1][frame]
-                    # if y == 0:
-                    #     y = mat['pos_img'][1][joint1 - 1][frame]
-                    
-                    point = [np.round(x, 3), np.round(y, 3)]
-                    points_for_frame.append(point)
-                all_points.append(points_for_frame)
+            max_iou = 0
+            keypoints_max_iou = None
+            for person in people:
+                keypoints = people[0]['pose_keypoints_2d']
+                if compute_iou(mat, frame, keypoints) > max_iou:
+                    keypoints_max_iou = keypoints
+
+            if keypoints_max_iou is None:
+                continue
+
+            keypoints = keypoints_max_iou
+
+            # for i in range(25):
+            for i, joint1 in zip(KEYPOINT_INDICES, JHMDB_KEYPOINT_INDICES):
+                starting = i * 3
+                x = keypoints[starting]
+                y = keypoints[starting + 1]
+
+                # if x == 0:
+                #     x = mat['pos_img'][0][joint1 - 1][frame]
+                # if y == 0:
+                #     y = mat['pos_img'][1][joint1 - 1][frame]
+
+                point = [np.round(x, 3), np.round(y, 3)]
+                points_for_frame.append(point)
+            all_points.append(points_for_frame)
 
     return all_points
 
+def compute_iou(mat, frame, openpose_keypoints):
+    jhmdb_ymin = min(mat['pos_img'][1][joint][frame]
+                     for joint in range(len(mat['pos_img'][1])))
+    jhmdb_xmin = min(mat['pos_img'][0][joint][frame]
+                     for joint in range(len(mat['pos_img'][0])))
+    jhmdb_ymax = max(mat['pos_img'][1][joint][frame]
+                     for joint in range(len(mat['pos_img'][1])))
+    jhmdb_xmax = max(mat['pos_img'][0][joint][frame]
+                     for joint in range(len(mat['pos_img'][0])))
+    
+    openpose_ymin = float('inf')
+    openpose_xmin = float('inf')
+    openpose_ymax = 0
+    openpose_xmax = 0
+
+    for i in KEYPOINT_INDICES:
+        x = openpose_keypoints[i * 3]
+        y = openpose_keypoints[(i * 3) + 1]
+        
+        if x > 0:
+            if x < openpose_xmin:
+                openpose_xmin = x
+            if x > openpose_xmax:
+                openpose_xmax = x
+        if y > 0:
+            if y < openpose_ymin:
+                openpose_ymin = y
+            if y > openpose_ymax:
+                openpose_ymax = y
+
+    jhmdb_box = [jhmdb_xmin, jhmdb_ymin, jhmdb_xmax, jhmdb_ymax]
+    openpose_box = [openpose_xmin, openpose_ymin, openpose_xmax, openpose_ymax]
+
+    return iou(jhmdb_box, openpose_box)
+
+    
+def iou(boxA, boxB):
+    '''From https://www.pyimagesearch.com/2016/11/07/intersection-over-union-iou-for-object-detection/'''
+
+    # determine the (x, y)-coordinates of the intersection rectangle
+    xA = max(boxA[0], boxB[0])
+    yA = max(boxA[1], boxB[1])
+    xB = min(boxA[2], boxB[2])
+    yB = min(boxA[3], boxB[3])
+    # compute the area of intersection rectangle
+    interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+    # compute the area of both the prediction and ground-truth
+    # rectangles
+    boxAArea = (boxA[2] - boxA[0] + 1) * (boxA[3] - boxA[1] + 1)
+    boxBArea = (boxB[2] - boxB[0] + 1) * (boxB[3] - boxB[1] + 1)
+    # compute the intersection over union by taking the intersection
+    # area and dividing it by the sum of prediction + ground-truth
+    # areas - the interesection area
+    iou = interArea / float(boxAArea + boxBArea - interArea)
+    # return the intersection over union value
+    return iou
+
+    
 if __name__ == '__main__':
     main()
