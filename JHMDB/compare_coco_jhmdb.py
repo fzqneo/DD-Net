@@ -30,6 +30,8 @@ def iou(boxA, boxB):
 def main():
     good = 0
     bad = 0
+    no_prediction = 0
+    yes_prediction = 0
 
     data_dir = os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB')
     for mat_path in glob.glob('/home/roger/Downloads/joint_positions/*/*'):
@@ -45,7 +47,8 @@ def main():
         for frame in range(len(coco_file_paths)):
             coco_file_path = coco_file_paths[frame]
 
-            found_person = False
+            person_prediction = False
+            found_correct_person = False
             with open(coco_file_path) as json_file:
                 json_content = json.load(json_file)
 
@@ -54,6 +57,7 @@ def main():
                         json_content['detection_names'],
                         json_content['detection_scores']):
                     if detection_name == 'person' and detection_score > 0.5:
+                        person_prediction = True
 
                         assert json_content['origin_height'] == 240
                         assert json_content['origin_width'] == 320
@@ -88,15 +92,28 @@ def main():
                         coco_box = [coco_xmin, coco_ymin, coco_xmax, coco_ymax]
                         jhmdb_box = [jhmdb_xmin, jhmdb_ymin, jhmdb_xmax, jhmdb_ymax]
 
-                        if iou(coco_box, jhmdb_box) > 0.5:
-                            found_person = True
+                        if (((jhmdb_ymin > coco_ymin or abs(jhmdb_ymin - coco_ymin) < 10)
+                            and (jhmdb_xmin > coco_xmin or abs(jhmdb_xmin - coco_xmin) < 10)
+                            and (jhmdb_ymax < coco_ymax or abs(jhmdb_ymax - coco_ymax) < 10)
+                            and (jhmdb_xmax < coco_xmax or abs(jhmdb_xmax - coco_xmax) < 10)) or
+                        iou(coco_box, jhmdb_box) > 0.5):
+                            found_correct_person = True
 
-                if found_person:
+                if found_correct_person:
                     good += 1
                 else:
                     bad += 1
 
+                if person_prediction:
+                    yes_prediction += 1
+                else:
+                    no_prediction += 1
+
+                if person_prediction and not found_correct_person:
+                    print(mat_path, frame)
+
     print('good', good, 'bad', bad)
+    print('prediction: yes', yes_prediction, 'no', no_prediction)
 
 
 if __name__ == '__main__':
