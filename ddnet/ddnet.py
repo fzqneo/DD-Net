@@ -14,6 +14,172 @@ from scipy.spatial.distance import cdist
 #######################################################
 ## Public functions
 #######################################################
+
+#######################################################
+## OpenPose data cleaning
+#######################################################
+
+OP_HAND_PICKED_GOOD_JOINTS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 15, 16]
+
+
+def nan_helper(y):
+    """Helper function to handle real indices and logical indices of NaNs.
+
+    Input:
+        - y, 1d numpy array with possible NaNs
+    Output:
+        - nans, logical indices of NaNs
+        - index, a function, with signature indices= index(logical_indices),
+        to convert logical indices of NaNs to 'equivalent' indices
+    Example:
+        >>> # linear interpolation of NaNs
+        >>> nans, x= nan_helper(y)
+        >>> y[nans]= np.interp(x(nans), x(~nans), y[~nans])
+    """
+
+    return np.isnan(y), lambda z: z.nonzero()[0]
+
+class OpenPoseDataCleaner(object):
+
+    def __init__(self, copy=True, filter_joint_idx=OP_HAND_PICKED_GOOD_JOINTS):
+        super().__init__()
+        self.copy = copy
+        self.filter_joint_idx = filter_joint_idx
+
+    def transform_point(self, p):
+        """Clean a point output by OpenPose
+        
+        Arguments:
+            p {ndarray} -- OpenPose output containing 0s representing unknown joints
+        """
+        p = self.make_nan(p, self.copy)
+        if self.filter_joints:
+            p = self.filter_joints(p, self.filter_joint_idx)
+        p = self.temporal_interp(p, self.copy)
+        p = self.per_video_normalize(p, self.copy)
+        p = self.fill_nan_uniform(p, self.copy)
+        return p
+
+    def augment_XY(self, X, Y, factor=5):
+        """Take a training set X, Y and augment it by factor of `factor`.
+        Augmentation comes from the use of randomized functions like `fill_nan_uniform`
+        
+        Arguments:
+            X {list of ndarray} -- [description]
+            Y {ndarray} -- shape (num_points, num_classes)
+        
+        Keyword Arguments:
+            factor {int} -- [description] (default: {5})
+        """
+        Xa = []
+        Ya = []
+        for p1, y1 in zip(X, Y):
+            Xa.extend([self.transform_point(p1) for _ in range(factor)])
+            Ya.extend([y1] * factor)
+
+        Ya = np.stack(Ya)
+        assert len(Xa) == Ya.shape[0]
+        return Xa, Ya
+
+    @staticmethod
+    def make_nan(p, copy=True):
+        """
+        Convert 0 values to np.nan
+        """
+        assert isinstance(p, np.ndarray)
+        q = p.copy() if copy else p
+        q[q == 0] = np.nan
+        return q
+
+    @staticmethod
+    def has_nan(p):
+        assert isinstance(p, np.ndarray)
+        return np.isnan(p).any()
+
+    @staticmethod
+    def count_nan(p):
+        assert isinstance(p, np.ndarray)
+        return np.isnan(p).sum()
+        
+    @staticmethod
+    def filter_joints(p, good_joint_idx):
+        """
+        Filter a point by only keeping joints in good_joint_idx
+        """
+        return p[:, good_joint_idx, :]
+
+    @staticmethod
+    def temporal_interp(p, copy=True):
+        """
+        If a joint is detected in at least one frame in a video, 
+        we interpolate the nan coordinates from other frames.
+        This is done independently for each joint.
+        Note: it can still leave some all-nan columns if a joint is never detected in any frame.
+        """
+        q = p.copy() if copy else p
+
+        for j in range(q.shape[1]): # joint
+            for coord in range(q.shape[2]): # x, y (,z)
+                view = q[:, j, coord]
+                if np.isnan(view).all() or  not np.isnan(view).any():
+                    continue
+                nans, idx = nan_helper(view)
+                view[nans]= np.interp(idx(nans), idx(~nans), view[~nans])
+        return q
+
+    @staticmethod
+    def per_video_normalize(p, copy=True):
+        """
+        For x,y[, z] independently:
+            Normalize into between -0.5~0.5
+        """
+        q = p.copy() if copy else p
+        for coord in range(p.shape[2]):
+            view = q[:, :, coord]
+            a, b = np.nanmin(view), np.nanmax(view)
+            view[:] = ((view - a) / (b-a)) - 0.5
+
+        return q
+
+    @staticmethod
+    def fill_nan_random(p, copy=True, sigma=.5):
+        """
+        Fill nan values with normal distribution
+        """
+        q = p.copy() if copy else p
+        q[np.isnan(q)] = np.random.randn(np.count_nonzero(np.isnan(q))) * sigma
+        return q
+
+    @staticmethod
+    def fill_nan_uniform(p, copy=True, a=-0.5, b=0.5):
+        """
+        Fill nan values with normal distribution
+        """
+        q = p.copy() if copy else p
+        q[np.isnan(q)] = np.random.random((np.count_nonzero(np.isnan(q)),)) * (b-a) + a
+        return q
+
+    @staticmethod
+    def augment_nan(X, Y, num=5):
+        """
+        Data augmentation.
+        X is a list of arrays.
+        """
+        Xa = []
+        Ya = []
+        for p1, y1 in zip(X, Y):
+            Xa.extend([fill_nan_uniform(p1) for _ in range(num)])
+            Ya.extend([y1] * num)
+
+        Ya = np.stack(Ya)
+        assert len(Xa) == Ya.shape[0]
+        return Xa, Ya
+
+
+#######################################################
+## DDNet preprocessing and helper function
+#######################################################
+
 class DDNetConfig():
     def __init__(self, frame_length=32, num_joints=15, joint_dim=2, num_classes=21, num_filters=16):
         """Stores configuration of DDNet
