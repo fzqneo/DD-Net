@@ -10,6 +10,9 @@ MKV_SUFFIX = 'movies/trainval/{}.mkv'
 WEBM_SUFFIX = 'movies/trainval/{}.webm'
 OUTPUT_PREFIX = '/home/ubuntu/avaclips'
 
+CONTAINS_BOTH = {'rJKeqfTlAeY', '_ithRWANKB0', 'GozLjpMNADg',
+                 'GozLjpMNADg', 'P60OxWahxBQ', 'kMy-6RtoOVU'}
+
 
 def write_video(filename, output, start_timestamp, end_timestamp):
     video_path = os.path.join(PATH_PREFIX, MP4_SUFFIX.format(filename))
@@ -47,54 +50,59 @@ def main():
                 wave_times[filename].append(mid_timestamp)
 
         for filename in clap_times:
-            print(filename)
-            clap_set = set(clap_times[filename])
-            wave_set = set(wave_times[filename])
+            if filename in CONTAINS_BOTH:
+                continue
 
-            clap_times[filename] = clap_set.copy()
-            wave_times[filename] = wave_set.copy()
+            # Prevent duplicate annotations from causing a problem
+            clap_times[filename] = set(clap_times[filename])
+            wave_times[filename] = set(wave_times[filename])
+            
+            # clap_set = clap_times[filename].copy()
+            # wave_set = wave_times[filename].copy()
             
             while len(clap_times[filename]) > 0:
                 min_timestamp = min(clap_times[filename])
 
                 clap_times[filename].remove(min_timestamp)
-                if (min_timestamp + 1) in clap_set:
+                if (min_timestamp + 1) in clap_times[filename]:
                     clap_times[filename].remove(min_timestamp + 1)
 
                 start_timestamp = min_timestamp - 2
                 end_timestamp = min_timestamp + 2
 
-                while end_timestamp in clap_set:
+                while end_timestamp in clap_times[filename]:
                     clap_times[filename].remove(end_timestamp)
                     
                     end_timestamp += 1
 
-                contains_both = False
-                for i in range(start_timestamp, end_timestamp + 1):
-                    if filename != '_ithRWANKB0' and i != 1062 and i in wave_set:
-                        wave_times[filename].remove(i)
-                        contains_both = True
+                # contains_both = False
+                # for i in range(start_timestamp, end_timestamp + 1):
+                #     if i in wave_set:
+                #         wave_times[filename].remove(i)
+                #         contains_both = True
 
-                if contains_both:
-                    write_video(filename, 'clapwave{}.mp4'.format(clap_wave_count),
-                                start_timestamp, end_timestamp)
-                    clap_wave_count += 1
-                else:
-                    write_video(filename, 'clap{}.mp4'.format(clap_count),
-                                start_timestamp, end_timestamp)
-                    clap_count += 1
+                # if contains_both:
+                #     print(filename)
+                #     write_video(filename, 'clapwave{}.mp4'.format(clap_wave_count),
+                #                 start_timestamp, end_timestamp)
+                #     clap_wave_count += 1
+                # else:
+
+                write_video(filename, 'clap{}.mp4'.format(clap_count),
+                            start_timestamp, end_timestamp)
+                clap_count += 1
 
             while len(wave_times[filename]) > 0:
                 min_timestamp = min(wave_times[filename])
                 
                 wave_times[filename].remove(min_timestamp)
-                if (min_timestamp + 1) in wave_set:
+                if (min_timestamp + 1) in wave_times[filename]:
                     wave_times[filename].remove(min_timestamp + 1)
 
                 start_timestamp = min_timestamp - 2
                 end_timestamp = min_timestamp + 2
 
-                while end_timestamp in wave_set:
+                while end_timestamp in wave_times[filename]:
                     wave_times[filename].remove(end_timestamp)
 
                     end_timestamp += 1

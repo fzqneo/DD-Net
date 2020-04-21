@@ -37,7 +37,7 @@ not_replace = 0
 
 def main():
     data_dir = os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB')
-    save_dir = os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB_mix')
+    save_dir = os.path.join(os.path.abspath(''), '..', 'data', 'openpose_zeros_all')
 
     GT_split_lists = glob.glob(os.path.join(data_dir, 'GT_splits/*.txt'))
 
@@ -148,8 +148,8 @@ def pose_from_openpose(file_paths, mat):
 
             keypoints = keypoints_max_iou
 
-            # for i in range(25):
-            for i, joint1 in zip(KEYPOINT_INDICES, JHMDB_KEYPOINT_INDICES):
+            for i in range(25):
+                # for i, joint1 in zip(KEYPOINT_INDICES, JHMDB_KEYPOINT_INDICES):
                 starting = i * 3
                 x = keypoints[starting]
                 y = keypoints[starting + 1]
@@ -159,10 +159,10 @@ def pose_from_openpose(file_paths, mat):
                 else:
                     not_replace += 1
 
-                if x == 0:
-                    x = mat['pos_img'][0][joint1 - 1][frame]
-                if y == 0:
-                    y = mat['pos_img'][1][joint1 - 1][frame]
+                # if x == 0:
+                #     x = mat['pos_img'][0][joint1 - 1][frame]
+                # if y == 0:
+                #     y = mat['pos_img'][1][joint1 - 1][frame]
 
                 point = [np.round(x, 3), np.round(y, 3)]
                 points_for_frame.append(point)
