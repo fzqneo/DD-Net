@@ -37,7 +37,7 @@ not_replace = 0
 
 def main():
     data_dir = os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB')
-    save_dir = os.path.join(os.path.abspath(''), '..', 'data', 'openpose_zeros_all')
+    save_dir = os.path.join(os.path.abspath(''), '..', 'data', 'openpose_all_jhmdb_hybrid')
 
     GT_split_lists = glob.glob(os.path.join(data_dir, 'GT_splits/*.txt'))
 
@@ -123,6 +123,23 @@ def generate_pose(mat):
 KEYPOINT_INDICES = [1, 2, 5, 9, 12, 3, 6, 10, 13, 4, 7, 11, 14]
 
 
+OPENPOSE_TO_JHMDB = {
+    1: 1,
+    2: 4,
+    5: 5,
+    9: 6,
+    12: 7,
+    3: 8,
+    6: 9,
+    10: 10,
+    13: 11,
+    4: 12,
+    7: 13,
+    11: 14,
+    14: 15,
+}
+
+
 def pose_from_openpose(file_paths, mat):
     global replace
     global not_replace
@@ -159,6 +176,13 @@ def pose_from_openpose(file_paths, mat):
                 else:
                     not_replace += 1
 
+                if i in OPENPOSE_TO_JHMDB:
+                    jhmdb_index = OPENPOSE_TO_JHMDB[i]
+                    if x == 0:
+                        x = mat['pos_img'][0][jhmdb_index - 1][frame]
+                    if y == 0:
+                        x = mat['pos_img'][1][jhmdb_index - 1][frame]
+                        
                 # if x == 0:
                 #     x = mat['pos_img'][0][joint1 - 1][frame]
                 # if y == 0:
