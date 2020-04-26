@@ -181,7 +181,7 @@ def pose_from_openpose(file_paths, mat):
                     if x == 0:
                         x = mat['pos_img'][0][jhmdb_index - 1][frame]
                     if y == 0:
-                        x = mat['pos_img'][1][jhmdb_index - 1][frame]
+                        y = mat['pos_img'][1][jhmdb_index - 1][frame]
                         
                 # if x == 0:
                 #     x = mat['pos_img'][0][joint1 - 1][frame]
