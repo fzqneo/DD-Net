@@ -29,7 +29,7 @@ q_lock = threading.Lock()
 
 # cleaner for openpose
 import ddnet
-cleaner = ddnet.OpenPoseDataCleaner(copy=False)
+cleaner = ddnet.OpenPoseDataCleaner(copy=True, filter_joint_idx=ddnet.COMMON_GOOD_JOINTS_FROM_OP)
 
 # config for ddnet
 C = ddnet.DDNetConfig(frame_length=32, num_joints=len(cleaner.filter_joint_idx), joint_dim=2, num_classes=21, num_filters=32)
@@ -140,7 +140,7 @@ def classify():
         </samp>
         '''
 
-def main(model_path= "../JHMDB/jhmdb_openpose_model.h5", le_path= "../JHMDB/jhmdb_le.pkl", port=5000):
+def main(model_path= "../JHMDB/jhmdb_openpose_model_mixed_11.h5", le_path= "../JHMDB/jhmdb_le.pkl", port=5000):
 
     # Set up queues and start worker process
     global job_q
@@ -155,7 +155,7 @@ def main(model_path= "../JHMDB/jhmdb_openpose_model.h5", le_path= "../JHMDB/jhmd
     global le
     with open(le_path, 'rb') as f:
         le = pickle.load(f)
-        logger.info("Classes: ", le.classes_.tolist())
+        logger.info("Classes: " + str(le.classes_.tolist()))
 
     app.run(host='0.0.0.0',
             port=port,

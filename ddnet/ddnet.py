@@ -20,6 +20,9 @@ from scipy.spatial.distance import cdist
 #######################################################
 
 OP_HAND_PICKED_GOOD_JOINTS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 15, 16]
+# COMMON_JOINTS_FROM_JHMDB = np.array([1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]) - 1  
+COMMON_JOINTS_FROM_OP = [1, 2, 5, 9, 12, 3, 6, 10, 13, 4, 7, 11, 14] #  0-based
+COMMON_GOOD_JOINTS_FROM_OP = list(set(COMMON_JOINTS_FROM_OP).intersection(OP_HAND_PICKED_GOOD_JOINTS))
 
 
 def nan_helper(y):
@@ -41,10 +44,18 @@ def nan_helper(y):
 
 class OpenPoseDataCleaner(object):
 
-    def __init__(self, copy=True, filter_joint_idx=OP_HAND_PICKED_GOOD_JOINTS):
+    def __init__(self, copy=True, filter_joint_idx=OP_HAND_PICKED_GOOD_JOINTS, fill_nan_method='normal'):
         super().__init__()
+        assert fill_nan_method in ('uniform', 'normal', 'zero')
         self.copy = copy
         self.filter_joint_idx = filter_joint_idx
+
+        if fill_nan_method == 'uniform':
+            self.fill_nan_fn = self.fill_nan_uniform
+        elif fill_nan_method == 'normal':
+            self.fill_nan_fn = self.fill_nan_random
+        elif fill_nan_method == 'zero':
+            self.fill_nan_fn = self.fill_nan_constant
 
     def transform_point(self, p):
         """Clean a point output by OpenPose
@@ -53,11 +64,11 @@ class OpenPoseDataCleaner(object):
             p {ndarray} -- OpenPose output containing 0s representing unknown joints
         """
         p = self.make_nan(p, self.copy)
-        if self.filter_joints:
+        if self.filter_joint_idx is not None    :
             p = self.filter_joints(p, self.filter_joint_idx)
         p = self.temporal_interp(p, self.copy)
         p = self.per_video_normalize(p, self.copy)
-        p = self.fill_nan_uniform(p, self.copy)
+        p = self.fill_nan_fn(p, copy=True)
         return p
 
     def augment_XY(self, X, Y, factor=5):
@@ -106,7 +117,7 @@ class OpenPoseDataCleaner(object):
         """
         Filter a point by only keeping joints in good_joint_idx
         """
-        return p[:, good_joint_idx, :]
+        return p[:, good_joint_idx, :].copy()
 
     @staticmethod
     def temporal_interp(p, copy=True):
@@ -160,20 +171,13 @@ class OpenPoseDataCleaner(object):
         return q
 
     @staticmethod
-    def augment_nan(X, Y, num=5):
+    def fill_nan_constant(p, copy=True, fill_value=0):
         """
-        Data augmentation.
-        X is a list of arrays.
+        Fill nan values with normal distribution
         """
-        Xa = []
-        Ya = []
-        for p1, y1 in zip(X, Y):
-            Xa.extend([fill_nan_uniform(p1) for _ in range(num)])
-            Ya.extend([y1] * num)
-
-        Ya = np.stack(Ya)
-        assert len(Xa) == Ya.shape[0]
-        return Xa, Ya
+        q = p.copy() if copy else p
+        q[np.isnan(q)] = fill_value
+        return q
 
 
 #######################################################
