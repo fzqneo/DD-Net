@@ -52,7 +52,7 @@ def vote_mean_score(results):
     
 
 
-def main(op_json_dir, span=32, stride=16, ddnet_host='http://localhost:5002'):
+def main(op_json_dir, span=32, stride=16, ddnet_host='http://localhost:5001'):
     all_json_list = sorted(map(str, pathlib.Path(op_json_dir).rglob("*.json")))
 
     X = np.array(pose_from_openpose(all_json_list))

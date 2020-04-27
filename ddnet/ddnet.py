@@ -1,14 +1,14 @@
-from keras.optimizers import *
-from keras.models import Model, load_model
-from keras.layers import *
-from keras.layers.core import *
-from keras.layers.convolutional import *
-from keras import backend as K
-import tensorflow as tf
-
 import numpy as np
 import scipy.ndimage.interpolation as inter
-from scipy.signal import medfilt 
+import tensorflow as tf
+from keras import backend as K
+from keras import regularizers
+from keras.layers import *
+from keras.layers.convolutional import *
+from keras.layers.core import *
+from keras.models import Model, load_model
+from keras.optimizers import *
+from scipy.signal import medfilt
 from scipy.spatial.distance import cdist
 
 #######################################################
@@ -362,7 +362,7 @@ def block(x,filters):
     return x
     
 def d1D(x,filters):
-    x = Dense(filters,use_bias=False)(x)
+    x = Dense(filters,use_bias=False, kernel_regularizer=regularizers.l2(.01))(x)
     x = BatchNormalization()(x)
     x = LeakyReLU(alpha=0.2)(x)
     return x
@@ -424,7 +424,7 @@ def build_DD_Net(C):
     x = Dropout(0.5)(x)
     x = d1D(x,128)
     x = Dropout(0.5)(x)
-    x = Dense(C.clc_num, activation='softmax')(x)
+    x = Dense(C.clc_num, activation='softmax', kernel_regularizer=regularizers.l2(.01))(x)
     
     ######################Self-supervised part
     model = Model(inputs=[M,P],outputs=x)
