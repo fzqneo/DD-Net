@@ -24,6 +24,7 @@ OP_HAND_PICKED_GOOD_JOINTS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 15, 16]
 COMMON_JOINTS_FROM_OP = [1, 2, 5, 9, 12, 3, 6, 10, 13, 4, 7, 11, 14] #  0-based
 COMMON_GOOD_JOINTS_FROM_OP = list(set(COMMON_JOINTS_FROM_OP).intersection(OP_HAND_PICKED_GOOD_JOINTS))
 
+OP_UPPER_BODY_JOINTS = [0,1,2,3,4,5,6,7,15,16]
 
 def nan_helper(y):
     """Helper function to handle real indices and logical indices of NaNs.

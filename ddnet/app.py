@@ -149,6 +149,9 @@ def main(model_path= "../JHMDB/jhmdb_openpose_model_reduced_class_13.h5", le_pat
     elif 13 == mode:
         logger.warn("using 13 overlap joints")
         cleaner = ddnet.OpenPoseDataCleaner(copy=True, filter_joint_idx=ddnet.COMMON_JOINTS_FROM_OP)
+    elif 10 == mode:
+        logger.warn("using 10 upper body joints")
+        cleaner = ddnet.OpenPoseDataCleaner(copy=True, filter_joint_idx=ddnet.OP_UPPER_BODY_JOINTS)
     else:
         raise ValueError("Mode =" + str(mode))
 

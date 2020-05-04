@@ -5,6 +5,8 @@ import glob
 import re
 import pickle
 import numpy as np
+from pathlib import Path
+import fire
 
 
 PATH_RE = '^/home/ubuntu/joint_positions/([A-Za-z_]+)/([a-zA-Z0-9_\-!@\(\)\+]+)$'
@@ -35,15 +37,19 @@ replace = 0
 not_replace = 0
 
 
-def main():
-    data_dir = os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB')
-    save_dir = os.path.join(os.path.abspath(''), '..', 'data', 'openpose_all_jhmdb_hybrid')
+def main(
+    split_dir= os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB', 'GT_splits'),
+    save_dir=os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB_openpose_tracking_pkl'),
+    mat_dir=os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB', 'joint_positions'),
+    openpose_dir=os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB_openpose_tracking_json')
 
-    GT_split_lists = glob.glob(os.path.join(data_dir, 'GT_splits/*.txt'))
+):
+
+    GT_split_lists = list(Path(split_dir).rglob('*.txt')) 
 
     GT_lists_1 = []
     for filename in GT_split_lists:
-        if (filename.split('/')[-1].split('.')[0].split('_')[-1] == 'split1'):
+        if (Path(filename).stem.split('_')[-1] == 'split1'):
             GT_lists_1.append(filename)
 
     train_set, test_set = generate_train_test_sets(GT_lists_1)
@@ -57,35 +63,33 @@ def main():
 
     good_count, bad_count = 0, 0
     
-    prog = re.compile(PATH_RE)
-    for mat_path in glob.glob('/home/ubuntu/joint_positions/*/*'):
-        mat = scipy.io.loadmat(mat_path + '/joint_positions.mat')
-        re_result = prog.match(mat_path)
-        label = re_result.group(1)
-        filename_without_avi = re_result.group(2)
+    for action_mat_dir in [x for x in Path(mat_dir).iterdir() if x.is_dir() and not x.stem.startswith('.')]:
+        for vid_mat_dir in [y for y in action_mat_dir.iterdir() if y.is_dir() and not y.stem.startswith('.')]:
+            action_name = action_mat_dir.stem
+            vid_name = vid_mat_dir.stem
+            mat = scipy.io.loadmat(str(vid_mat_dir / 'joint_positions.mat'))
 
-        openpose_path = mat_path.replace(
-            '/home/ubuntu/joint_positions', '/home/ubuntu/openface_jhmdb')
+            vid_op_dir = Path(openpose_dir) / (vid_mat_dir.relative_to(mat_dir))
 
-        openpose_file_paths = sorted(glob.glob(openpose_path + '/*'))
-        assert mat['pos_img'].shape[2] == len(openpose_file_paths)
+            openpose_file_paths = sorted([str(x) for x in vid_op_dir.glob('*.json')])
+            assert mat['pos_img'].shape[2] == len(openpose_file_paths)
 
-        all_points = pose_from_openpose(openpose_file_paths, mat)
-        if len(all_points) < 30:
-            bad_count += 1
-        else:
-            good_count += 1
-            # pose = np.array(generate_pose(mat))
-            pose = np.array(all_points)
-
-            if filename_without_avi in train_set:
-                train['label'].append(label)
-                train['pose'].append(pose)
-            elif filename_without_avi in test_set:
-                test['label'].append(label)
-                test['pose'].append(pose)
+            all_points = pose_from_openpose(openpose_file_paths, mat)
+            if len(all_points) < 30:
+                bad_count += 1
             else:
-                raise Exception('Not in train or test')
+                good_count += 1
+                # pose = np.array(generate_pose(mat))
+                pose = np.array(all_points)
+
+                if vid_name in train_set:
+                    train['label'].append(action_name)
+                    train['pose'].append(pose)
+                elif vid_name in test_set:
+                    test['label'].append(action_name)
+                    test['pose'].append(pose)
+                else:
+                    raise Exception('Not in train or test')
 
     pickle.dump(train, open(os.path.join(save_dir, "GT_train_1.pkl"), "wb"))
     pickle.dump(test, open(os.path.join(save_dir, "GT_test_1.pkl"), "wb"))
@@ -140,7 +144,7 @@ OPENPOSE_TO_JHMDB = {
 }
 
 
-def pose_from_openpose(file_paths, mat):
+def pose_from_openpose(file_paths, mat, doctor=False):
     global replace
     global not_replace
     
@@ -171,17 +175,18 @@ def pose_from_openpose(file_paths, mat):
                 x = keypoints[starting]
                 y = keypoints[starting + 1]
 
-                if x == 0 or y == 0:
-                    replace += 1
-                else:
-                    not_replace += 1
+                if doctor:
+                    if x == 0 or y == 0:
+                        replace += 1
+                    else:
+                        not_replace += 1
 
-                if i in OPENPOSE_TO_JHMDB:
-                    jhmdb_index = OPENPOSE_TO_JHMDB[i]
-                    if x == 0:
-                        x = mat['pos_img'][0][jhmdb_index - 1][frame]
-                    if y == 0:
-                        y = mat['pos_img'][1][jhmdb_index - 1][frame]
+                    if i in OPENPOSE_TO_JHMDB:
+                        jhmdb_index = OPENPOSE_TO_JHMDB[i]
+                        if x == 0:
+                            x = mat['pos_img'][0][jhmdb_index - 1][frame]
+                        if y == 0:
+                            y = mat['pos_img'][1][jhmdb_index - 1][frame]
                         
                 # if x == 0:
                 #     x = mat['pos_img'][0][joint1 - 1][frame]
@@ -253,4 +258,4 @@ def iou(boxA, boxB):
 
     
 if __name__ == '__main__':
-    main()
+    fire.Fire(main)
