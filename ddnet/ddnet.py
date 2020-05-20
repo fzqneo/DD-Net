@@ -235,7 +235,26 @@ def load_DDNet(path):
     return load_model(path, custom_objects=_custom_objs)    # custom_objects is necessary
 
 
-def preprocess_batch(batch, C):
+def preprocess_point(p, C):
+    """Preprocess a single point (a clip)
+    
+    Arguments:
+        p {ndarray} -- shape = (variable, C.joint_n, C.joint_d)
+        C {DDNetConfig} -- A Config object
+
+    Returns:
+        ndarray, ndarray -- X0, X1 to input to the net
+    """
+    assert p.shape[1:] == (C.joint_n, C.joint_d)
+    p = zoom(p,target_l=C.frame_l,joints_num=C.joint_n,joints_dim=C.joint_d)
+    # interploate to the right number of frames
+    assert p.shape == (C.frame_l, C.joint_n, C.joint_d)
+    M = get_CG(p, C)
+
+    return M, p
+
+
+def preprocess_batch(batch, C, preprocess_point_fn=preprocess_point):
     """Preprocesss a batch of points (clips)
     
     Arguments:
@@ -249,7 +268,7 @@ def preprocess_batch(batch, C):
     X0 = []
     X1 = []
     for p in batch:
-        px0, px1 = preprocess_point(p, C)
+        px0, px1 = preprocess_point_fn(p, C)
         X0.append(px0)
         X1.append(px1)
     X0 = np.stack(X0)
@@ -314,25 +333,6 @@ def get_CG(p,C):
     M = norm_scale(M)
     return M
 
-def preprocess_point(p, C):
-    """Preprocess a single point (a clip)
-    
-    Arguments:
-        p {ndarray} -- shape = (variable, C.joint_n, C.joint_d)
-        C {DDNetConfig} -- A Config object
-
-    Returns:
-        ndarray, ndarray -- X0, X1 to input to the net
-    """
-    assert p.shape[1:] == (C.joint_n, C.joint_d)
-    p = zoom(p,target_l=C.frame_l,joints_num=C.joint_n,joints_dim=C.joint_d)
-    # interploate to the right number of frames
-    assert p.shape == (C.frame_l, C.joint_n, C.joint_d)
-    M = get_CG(p, C)
-
-    return M, p
-
-
 #######################################################
 ### Model architecture
 #######################################################
@@ -363,7 +363,7 @@ def block(x,filters):
     return x
     
 def d1D(x,filters):
-    x = Dense(filters,use_bias=False, kernel_regularizer=regularizers.l2(.01))(x)
+    x = Dense(filters,use_bias=False)(x)
     x = BatchNormalization()(x)
     x = LeakyReLU(alpha=0.2)(x)
     return x
@@ -425,7 +425,7 @@ def build_DD_Net(C):
     x = Dropout(0.5)(x)
     x = d1D(x,128)
     x = Dropout(0.5)(x)
-    x = Dense(C.clc_num, activation='softmax', kernel_regularizer=regularizers.l2(.01))(x)
+    x = Dense(C.clc_num, activation='softmax')(x)
     
     ######################Self-supervised part
     model = Model(inputs=[M,P],outputs=x)

@@ -41,7 +41,8 @@ def main(
     split_dir= os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB', 'GT_splits'),
     save_dir=os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB_openpose_tracking_pkl'),
     mat_dir=os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB', 'joint_positions'),
-    openpose_dir=os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB_openpose_tracking_json')
+    openpose_dir=os.path.join(os.path.abspath(''), '..', 'data', 'JHMDB_openpose_tracking_json'),
+    doctor=False
 
 ):
 
@@ -57,9 +58,11 @@ def main(
     train = {}
     train['pose'] = []
     train['label'] = []
+    train['filename'] = []
     test = {}
     test['pose'] = []
     test['label'] = []
+    test['filename'] = []
 
     good_count, bad_count = 0, 0
     
@@ -74,20 +77,22 @@ def main(
             openpose_file_paths = sorted([str(x) for x in vid_op_dir.glob('*.json')])
             assert mat['pos_img'].shape[2] == len(openpose_file_paths)
 
-            all_points = pose_from_openpose(openpose_file_paths, mat)
-            if len(all_points) < 30:
+            all_points = pose_from_openpose(openpose_file_paths, mat, doctor=doctor)
+            if len(all_points) < 16:
                 bad_count += 1
             else:
                 good_count += 1
                 # pose = np.array(generate_pose(mat))
-                pose = np.array(all_points)
+                pose = np.array(all_points, dtype=np.float)
 
                 if vid_name in train_set:
                     train['label'].append(action_name)
                     train['pose'].append(pose)
+                    train['filename'].append(str(vid_mat_dir.relative_to(mat_dir)))
                 elif vid_name in test_set:
                     test['label'].append(action_name)
                     test['pose'].append(pose)
+                    test['filename'].append(str(vid_mat_dir.relative_to(mat_dir)))
                 else:
                     raise Exception('Not in train or test')
 
@@ -144,7 +149,7 @@ OPENPOSE_TO_JHMDB = {
 }
 
 
-def pose_from_openpose(file_paths, mat, doctor=False):
+def pose_from_openpose(file_paths, mat, doctor=False, score_thres=0.1):
     global replace
     global not_replace
     
@@ -172,8 +177,10 @@ def pose_from_openpose(file_paths, mat, doctor=False):
             for i in range(25):
                 # for i, joint1 in zip(KEYPOINT_INDICES, JHMDB_KEYPOINT_INDICES):
                 starting = i * 3
-                x = keypoints[starting]
-                y = keypoints[starting + 1]
+                x, y, score = keypoints[starting: starting+3]
+
+                if score < score_thres:
+                    x = y = 0.
 
                 if doctor:
                     if x == 0 or y == 0:
