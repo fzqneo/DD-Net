@@ -24,7 +24,7 @@ OP_HAND_PICKED_GOOD_JOINTS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 15, 16]
 COMMON_JOINTS_FROM_OP = [1, 2, 5, 9, 12, 3, 6, 10, 13, 4, 7, 11, 14] #  0-based
 COMMON_GOOD_JOINTS_FROM_OP = list(set(COMMON_JOINTS_FROM_OP).intersection(OP_HAND_PICKED_GOOD_JOINTS))
 
-OP_UPPER_BODY_JOINTS = [0,1,2,3,4,5,6,7,15,16]
+OP_UPPER_BODY_JOINTS = [0,1,2,3,4,5,6,7,8,15,16]
 
 def nan_helper(y):
     """Helper function to handle real indices and logical indices of NaNs.
@@ -45,18 +45,10 @@ def nan_helper(y):
 
 class OpenPoseDataCleaner(object):
 
-    def __init__(self, copy=True, filter_joint_idx=OP_HAND_PICKED_GOOD_JOINTS, fill_nan_method='normal'):
+    def __init__(self, copy=True, filter_joint_idx=OP_HAND_PICKED_GOOD_JOINTS):
         super().__init__()
-        assert fill_nan_method in ('uniform', 'normal', 'zero')
         self.copy = copy
         self.filter_joint_idx = filter_joint_idx
-
-        if fill_nan_method == 'uniform':
-            self.fill_nan_fn = self.fill_nan_uniform
-        elif fill_nan_method == 'normal':
-            self.fill_nan_fn = self.fill_nan_random
-        elif fill_nan_method == 'zero':
-            self.fill_nan_fn = self.fill_nan_constant
 
     def transform_point(self, p):
         """Clean a point output by OpenPose
@@ -69,7 +61,6 @@ class OpenPoseDataCleaner(object):
             p = self.filter_joints(p, self.filter_joint_idx)
         p = self.temporal_interp(p, self.copy)
         p = self.per_video_normalize(p, self.copy)
-        p = self.fill_nan_fn(p, copy=True)
         return p
 
     def augment_XY(self, X, Y, factor=5):
@@ -121,19 +112,19 @@ class OpenPoseDataCleaner(object):
         return p[:, good_joint_idx, :].copy()
 
     @staticmethod
-    def temporal_interp(p, copy=True):
+    def temporal_interp(p, copy=True, known_ratio_thresh=0.1):
         """
-        If a joint is detected in at least one frame in a video, 
+        If a joint is detected in at least `known_ratio_thres` frames in a video, 
         we interpolate the nan coordinates from other frames.
         This is done independently for each joint.
-        Note: it can still leave some all-nan columns if a joint is never detected in any frame.
+        Note: it can still leave some nan-filled columns if a joint is not detected in most frames.
         """
         q = p.copy() if copy else p
 
         for j in range(q.shape[1]): # joint
             for coord in range(q.shape[2]): # x, y (,z)
                 view = q[:, j, coord]
-                if np.isnan(view).all() or  not np.isnan(view).any():
+                if np.count_nonzero(~np.isnan(view)) / view.size < known_ratio_thresh or not np.isnan(view).any():
                     continue
                 nans, idx = nan_helper(view)
                 view[nans]= np.interp(idx(nans), idx(~nans), view[~nans])
@@ -143,13 +134,15 @@ class OpenPoseDataCleaner(object):
     def per_video_normalize(p, copy=True):
         """
         For x,y[, z] independently:
-            Normalize into between -0.5~0.5
+            Normalize into approximately between -0.5~0.5
         """
         q = p.copy() if copy else p
+        # use the same demoniator so aspect ratio is preserved
+        W = np.nanmax(q[:, :, 0]) - np.nanmin(q[:, :, 0])
         for coord in range(p.shape[2]):
             view = q[:, :, coord]
             a, b = np.nanmin(view), np.nanmax(view)
-            view[:] = ((view - a) / (b-a)) - 0.5
+            view[:] = ((view - a) / W) - 0.5
 
         return q
 
@@ -236,7 +229,8 @@ def load_DDNet(path):
 
 
 def preprocess_point(p, C):
-    """Preprocess a single point (a clip)
+    """Preprocess a single point (a clip).
+    WANR: NAN-preserving
     
     Arguments:
         p {ndarray} -- shape = (variable, C.joint_n, C.joint_d)
@@ -300,8 +294,8 @@ def zoom(p,target_l=64,joints_num=25,joints_dim=3):
         ndarray -- Rescaled array of size (target_l, num_joints, joints_dim)
     """
     l = p.shape[0]
-    if l == target_l: # need do nothing
-        return p
+    # if l == target_l: # need do nothing
+    #     return p
     p_new = np.empty([target_l,joints_num,joints_dim]) 
     for m in range(joints_num):
         for n in range(joints_dim):
@@ -309,7 +303,7 @@ def zoom(p,target_l=64,joints_num=25,joints_dim=3):
     return p_new
 
 def norm_scale(x):
-    return (x-np.mean(x))/np.mean(x)
+    return (x-np.nanmean(x))/np.nanmean(x)
 
 def get_CG(p,C):
     """Compute the Joint Collection Distances (JCD, refer to the paper) of a group of frames
@@ -415,6 +409,9 @@ def build_DD_Net(C):
     M = Input(name='M', shape=(C.frame_l,C.feat_d))  # JCD
     P = Input(name='P', shape=(C.frame_l,C.joint_n,C.joint_d)) # Cartesian
     
+    # M_ = SpatialDropout1D(0.1)(M)
+    # P_ = Permute((1,3,2))(SpatialDropout2D(0.1, data_format='channels_last')(Permute((1,3,2))(P)))
+
     FM = build_FM(C.frame_l,C.joint_n,C.joint_d,C.feat_d,C.filters)
     
     x = FM([M,P])
