@@ -11,6 +11,16 @@ import numpy as np
 # Run Keras model in a separate process
 def net_worker(job_q, res_q, model_path):
     import ddnet
+    from keras import backend as K
+    import tensorflow as tf
+
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
+    # config.log_device_placement = True  # to log device placement (on which device the operation ran)
+
+    sess = tf.Session(config=config)
+    K.set_session(sess)
+
     net = ddnet.load_DDNet(model_path)
     while True:
         X = job_q.get()
@@ -41,11 +51,22 @@ def classify():
         # if POST, run inference
         p = np.array(flask.request.get_json(force=True))
         # logger.debug(p)
-        # OpenPose cleaning
-        p_clean = cleaner.transform_point(p)
-        # DDNet preprocessing (only on CPU)
-        X_0, X_1 = ddnet.preprocess_batch([p_clean,], C)
-        # DDNet inference (may run on GPU)
+
+        # 1. NANify
+        p_nan = cleaner.make_nan(p)
+
+        # 2. cleaner (still have NAN)
+        p_clean = cleaner.transform_point(p_nan)
+
+        # 3. create X_0 and X_1
+        X_0_nan, X_1_nan = ddnet.preprocess_batch([p_clean], C)
+
+        # 4. Fill NAN with 0
+        X_0, X_1 = X_0_nan.copy(), X_1_nan.copy()
+        X_0[np.isnan(X_0)] = 0.
+        X_1[np.isnan(X_1)] = 0.
+
+        # 5. submit to work queue: DDNet inference (may run on GPU)
         with q_lock:
             job_q.put([X_0, X_1])
             proba = res_q.get()[0]
@@ -155,7 +176,7 @@ def main(model_path= "../JHMDB/jhmdb_openpose_model_reduced_class_13.h5", le_pat
     else:
         raise ValueError("Mode =" + str(mode))
 
-    C = ddnet.DDNetConfig(frame_length=32, num_joints=len(cleaner.filter_joint_idx), joint_dim=2, num_classes=21, num_filters=32)
+    C = ddnet.DDNetConfig(frame_length=32, num_joints=len(cleaner.filter_joint_idx), joint_dim=2, num_classes=21, num_filters=64)
 
     # Set up queues and start worker process
     global job_q
