@@ -230,7 +230,7 @@ def load_DDNet(path):
 
 def preprocess_point(p, C):
     """Preprocess a single point (a clip).
-    WANR: NAN-preserving
+    WARN: NAN-preserving
     
     Arguments:
         p {ndarray} -- shape = (variable, C.joint_n, C.joint_d)
@@ -297,9 +297,11 @@ def zoom(p,target_l=64,joints_num=25,joints_dim=3):
     # if l == target_l: # need do nothing
     #     return p
     p_new = np.empty([target_l,joints_num,joints_dim]) 
+
     for m in range(joints_num):
         for n in range(joints_dim):
             p_new[:,m,n] = inter.zoom(p[:,m,n],target_l/l)
+            p_new[:,m,n] = medfilt(p_new[:,m,n],3)
     return p_new
 
 def norm_scale(x):
